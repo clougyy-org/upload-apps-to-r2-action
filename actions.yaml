@@ -1,0 +1,165 @@
+name: 'Upload to Cloudflare R2'
+description: 'Upload files to Cloudflare R2 storage with organized paths'
+author: 'Your Organization'
+
+branding:
+  icon: 'upload-cloud'
+  color: 'blue'
+
+inputs:
+  filepath:
+    description: 'Path to the file to upload'
+    required: true
+  appname:
+    description: 'Application name (used in S3 path)'
+    required: true
+  apptype:
+    description: 'Application type (android/ios/web) - used as root folder'
+    required: true
+  r2-endpoint:
+    description: 'Cloudflare R2 endpoint URL'
+    required: true
+  r2-access-key-id:
+    description: 'R2 Access Key ID'
+    required: true
+  r2-secret-access-key:
+    description: 'R2 Secret Access Key'
+    required: true
+  r2-bucket:
+    description: 'R2 Bucket name'
+    required: true
+  custom-filename:
+    description: 'Custom filename (optional, defaults to original filename)'
+    required: false
+    default: ''
+  make-public:
+    description: 'Make the uploaded file publicly accessible'
+    required: false
+    default: 'false'
+
+outputs:
+  file-url:
+    description: 'URL of the uploaded file'
+    value: ${{ steps.upload.outputs.file-url }}
+  s3-path:
+    description: 'S3 path where file was uploaded'
+    value: ${{ steps.upload.outputs.s3-path }}
+  file-size:
+    description: 'Size of the uploaded file'
+    value: ${{ steps.upload.outputs.file-size }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 📦 Install AWS CLI
+      shell: bash
+      run: |
+        if ! command -v aws &> /dev/null; then
+          echo "📥 Installing AWS CLI..."
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS
+            curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
+            sudo installer -pkg AWSCLIV2.pkg -target /
+            rm AWSCLIV2.pkg
+          else
+            # Linux
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip -q awscliv2.zip
+            sudo ./aws/install
+            rm -rf aws awscliv2.zip
+          fi
+          echo "✅ AWS CLI installed"
+        else
+          echo "✅ AWS CLI already installed"
+        fi
+        aws --version
+
+    - name: 🔐 Configure AWS Credentials for R2
+      shell: bash
+      run: |
+        aws configure set aws_access_key_id "${{ inputs.r2-access-key-id }}"
+        aws configure set aws_secret_access_key "${{ inputs.r2-secret-access-key }}"
+        aws configure set region auto
+        aws configure set output json
+        echo "✅ AWS credentials configured for R2"
+
+    - name: 📤 Upload to R2
+      id: upload
+      shell: bash
+      run: |
+        # Validate inputs
+        if [ ! -f "${{ inputs.filepath }}" ]; then
+          echo "❌ Error: File not found: ${{ inputs.filepath }}"
+          exit 1
+        fi
+        
+        # Get filename
+        if [ -n "${{ inputs.custom-filename }}" ]; then
+          FILENAME="${{ inputs.custom-filename }}"
+        else
+          FILENAME=$(basename "${{ inputs.filepath }}")
+        fi
+        
+        # Build S3 path: apptype/appname/filename
+        S3_PATH="${{ inputs.apptype }}/${{ inputs.appname }}/$FILENAME"
+        
+        # Get file size
+        FILE_SIZE=$(du -h "${{ inputs.filepath }}" | cut -f1)
+        
+        echo "📂 Upload Details:"
+        echo "  • File: ${{ inputs.filepath }}"
+        echo "  • Size: $FILE_SIZE"
+        echo "  • Destination: s3://${{ inputs.r2-bucket }}/$S3_PATH"
+        
+        # Upload to R2
+        if [ "${{ inputs.make-public }}" = "true" ]; then
+          echo "📤 Uploading with public-read ACL..."
+          aws s3 cp "${{ inputs.filepath }}" \
+            "s3://${{ inputs.r2-bucket }}/$S3_PATH" \
+            --endpoint-url "${{ inputs.r2-endpoint }}" \
+            --acl public-read
+        else
+          echo "📤 Uploading (private)..."
+          aws s3 cp "${{ inputs.filepath }}" \
+            "s3://${{ inputs.r2-bucket }}/$S3_PATH" \
+            --endpoint-url "${{ inputs.r2-endpoint }}"
+        fi
+        
+        if [ $? -eq 0 ]; then
+          echo "✅ Upload successful!"
+          
+          # Generate file URL
+          if [ "${{ inputs.make-public }}" = "true" ]; then
+            # For public files, construct the public URL
+            # Format: https://{bucket}.{account-id}.r2.cloudflarestorage.com/{path}
+            FILE_URL="${{ inputs.r2-endpoint }}/${{ inputs.r2-bucket }}/$S3_PATH"
+          else
+            # For private files, generate a presigned URL (valid for 7 days)
+            FILE_URL=$(aws s3 presign \
+              "s3://${{ inputs.r2-bucket }}/$S3_PATH" \
+              --endpoint-url "${{ inputs.r2-endpoint }}" \
+              --expires-in 604800)
+          fi
+          
+          echo "file-url=$FILE_URL" >> $GITHUB_OUTPUT
+          echo "s3-path=$S3_PATH" >> $GITHUB_OUTPUT
+          echo "file-size=$FILE_SIZE" >> $GITHUB_OUTPUT
+          
+          echo ""
+          echo "📊 Upload Summary:"
+          echo "  • S3 Path: $S3_PATH"
+          echo "  • File Size: $FILE_SIZE"
+          echo "  • URL: $FILE_URL"
+        else
+          echo "❌ Upload failed!"
+          exit 1
+        fi
+
+    - name: 🧹 Cleanup
+      if: always()
+      shell: bash
+      run: |
+        # Clear AWS credentials from config
+        aws configure set aws_access_key_id "" || true
+        aws configure set aws_secret_access_key "" || true
+        echo "✅ Cleanup complete"
