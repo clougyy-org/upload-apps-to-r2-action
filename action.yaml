@@ -56,18 +56,15 @@ runs:
       run: |
         if ! command -v aws &> /dev/null; then
           echo "📥 Installing AWS CLI..."
-          if [[ "$OSTYPE" == "darwin"* ]]; then
-            # macOS
-            curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
-            sudo installer -pkg AWSCLIV2.pkg -target /
-            rm AWSCLIV2.pkg
-          else
-            # Linux
-            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-            unzip -q awscliv2.zip
-            sudo ./aws/install
-            rm -rf aws awscliv2.zip
-          fi
+          # Linux - install to user directory without sudo
+          echo "Installing to user directory (~/.local/aws-cli)..."
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip -q awscliv2.zip
+          ./aws/install --install-dir ~/.local/aws-cli --bin-dir ~/.local/bin
+          rm -rf aws awscliv2.zip
+          # Add to PATH for this session
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
           echo "✅ AWS CLI installed"
         else
           echo "✅ AWS CLI already installed"
