@@ -1,6 +1,6 @@
 name: 'Upload to Cloudflare R2'
 description: 'Upload files to Cloudflare R2 storage with organized paths'
-author: 'Your Organization'
+author: 'Clougyy Org'
 
 branding:
   icon: 'upload-cloud'
