@@ -1,55 +1,55 @@
-name: 'Upload to Cloudflare R2'
-description: 'Upload files to Cloudflare R2 storage with organized paths'
-author: 'Clougyy Org'
+name: "Upload to Cloudflare R2"
+description: "Upload files to Cloudflare R2 storage with organized paths"
+author: "Clougyy Org"
 
 branding:
-  icon: 'upload-cloud'
-  color: 'blue'
+  icon: "upload-cloud"
+  color: "blue"
 
 inputs:
   filepath:
-    description: 'Path to the file to upload'
+    description: "Path to the file to upload"
     required: true
   appname:
-    description: 'Application name (used in S3 path)'
+    description: "Application name (used in S3 path)"
     required: true
   apptype:
-    description: 'Application type (android/ios/web) - used as root folder'
+    description: "Application type (android/ios/web) - used as root folder"
     required: true
   r2-endpoint:
-    description: 'Cloudflare R2 endpoint URL'
+    description: "Cloudflare R2 endpoint URL"
     required: true
   r2-access-key-id:
-    description: 'R2 Access Key ID'
+    description: "R2 Access Key ID"
     required: true
   r2-secret-access-key:
-    description: 'R2 Secret Access Key'
+    description: "R2 Secret Access Key"
     required: true
   r2-bucket:
-    description: 'R2 Bucket name'
+    description: "R2 Bucket name"
     required: true
   custom-filename:
-    description: 'Custom filename (optional, defaults to original filename)'
+    description: "Custom filename (optional, defaults to original filename)"
     required: false
-    default: ''
+    default: ""
   make-public:
-    description: 'Make the uploaded file publicly accessible'
+    description: "Make the uploaded file publicly accessible"
     required: false
-    default: 'false'
+    default: "false"
 
 outputs:
   file-url:
-    description: 'URL of the uploaded file'
+    description: "URL of the uploaded file"
     value: ${{ steps.upload.outputs.file-url }}
   s3-path:
-    description: 'S3 path where file was uploaded'
+    description: "S3 path where file was uploaded"
     value: ${{ steps.upload.outputs.s3-path }}
   file-size:
-    description: 'Size of the uploaded file'
+    description: "Size of the uploaded file"
     value: ${{ steps.upload.outputs.file-size }}
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - name: 📦 Install AWS CLI
       shell: bash
@@ -60,7 +60,7 @@ runs:
           echo "Installing to user directory (~/.local/aws-cli)..."
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
           unzip -q awscliv2.zip
-          ./aws/install --install-dir ~/.local/aws-cli --bin-dir ~/.local/bin
+            ./aws/install -u --install-dir ~/.local/aws-cli --bin-dir ~/.local/bin
           rm -rf aws awscliv2.zip
           # Add to PATH for this session
           export PATH="$HOME/.local/bin:$PATH"
@@ -89,25 +89,25 @@ runs:
           echo "❌ Error: File not found: ${{ inputs.filepath }}"
           exit 1
         fi
-        
+
         # Get filename
         if [ -n "${{ inputs.custom-filename }}" ]; then
           FILENAME="${{ inputs.custom-filename }}"
         else
           FILENAME=$(basename "${{ inputs.filepath }}")
         fi
-        
+
         # Build S3 path: apptype/appname/filename
         S3_PATH="${{ inputs.apptype }}/${{ inputs.appname }}/$FILENAME"
-        
+
         # Get file size
         FILE_SIZE=$(du -h "${{ inputs.filepath }}" | cut -f1)
-        
+
         echo "📂 Upload Details:"
         echo "  • File: ${{ inputs.filepath }}"
         echo "  • Size: $FILE_SIZE"
         echo "  • Destination: s3://${{ inputs.r2-bucket }}/$S3_PATH"
-        
+
         # Upload to R2
         if [ "${{ inputs.make-public }}" = "true" ]; then
           echo "📤 Uploading with public-read ACL..."
@@ -121,7 +121,7 @@ runs:
             "s3://${{ inputs.r2-bucket }}/$S3_PATH" \
             --endpoint-url "${{ inputs.r2-endpoint }}"
         fi
-        
+
         if [ $? -eq 0 ]; then
           echo "✅ Upload successful!"
           
